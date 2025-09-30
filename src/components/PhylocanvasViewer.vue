@@ -39,18 +39,19 @@ let treeInstance: any = null
 let phylocanvasLoaded = false
 
 // Helper functions
-const extractAccessionVersion = (nodeName: string): string => {
-  // Split the node name by '|' and return the first part
-  return nodeName.split('|')[0];
+const extractSeqdbIdentifier = (nodeName: string): string => {
+  // Node names in the tree should match seqdb_genome_identifier from metadata
+  // Handle potential formatting differences
+  return nodeName.trim();
 };
 
 const isNodeMatched = (nodeName: string): boolean => {
-  const accessionVersion = extractAccessionVersion(nodeName);
+  const identifier = extractSeqdbIdentifier(nodeName);
   if (!props.searchTerm || !props.metadata.length) {
     return false;
   }
 
-  const metadataItem = props.metadata.find(item => item.accessionVersion === accessionVersion);
+  const metadataItem = props.metadata.find(item => item.seqdb_genome_identifier === identifier);
   if (metadataItem) {
     return Object.values(metadataItem).some(val =>
       val.toLowerCase().includes(props.searchTerm.toLowerCase())
@@ -60,12 +61,12 @@ const isNodeMatched = (nodeName: string): boolean => {
 };
 
 const getNodeColor = (nodeName: string): string | null => {
-  const accessionVersion = extractAccessionVersion(nodeName);
+  const identifier = extractSeqdbIdentifier(nodeName);
   if (!props.selectedField || !Object.keys(props.colorMap).length || !props.metadata.length) {
     return null;
   }
 
-  const metadataItem = props.metadata.find(item => item.accessionVersion === accessionVersion);
+  const metadataItem = props.metadata.find(item => item.seqdb_genome_identifier === identifier);
   if (metadataItem && metadataItem[props.selectedField] && props.colorMap[metadataItem[props.selectedField]]) {
     return props.colorMap[metadataItem[props.selectedField]];
   }
@@ -232,7 +233,7 @@ const renderTree = async () => {
           <p style="color: #d32f2f; margin-bottom: 15px;">
             <strong>Error:</strong> ${error.value}
           </p>
-          <p>Tree calculation completed successfully. The issue is with the visualization library.</p>
+          <p>Tree data received successfully. The issue is with the visualization library.</p>
           <details style="margin-top: 15px;">
             <summary style="cursor: pointer; font-weight: bold;">Show Newick Tree Data</summary>
             <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 10px;">${props.newick}</pre>
@@ -267,7 +268,7 @@ const applyNodeStyling = () => {
       treeInstance.on('node-click', (node: any) => {
         console.log('Node clicked:', node.label || 'internal node')
         if (node.isLeaf && node.label) {
-          const metadataItem = props.metadata.find(item => item.accession === node.label)
+          const metadataItem = props.metadata.find(item => item.seqdb_genome_identifier === node.label)
           if (metadataItem) {
             console.log('Node metadata:', metadataItem)
           }

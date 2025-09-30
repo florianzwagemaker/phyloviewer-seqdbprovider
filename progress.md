@@ -9,14 +9,8 @@ This document tracks the progress of the PhyloViewer project.
 - [x] Install npm dependencies.
 - [x] Set up project structure (components, services, etc.).
 
-### File Handling
-- [x] Implement FASTA file loading from a URL (textbox).
-- [x] Implement FASTA file loading from `input-fasta` URL parameter.
 - [x] Implement TSV metadata loading from a URL parameter.
 
-### Backend (WebAssembly)
-- [x] Integrate `fasttree` biowasm module for phylogenetic tree calculation.
-- [x] Create a wrapper service for the wasm module.
 
 ### Visualization
 - [x] Choose and integrate a tree visualization library (PhylocanvasGL via CDN).

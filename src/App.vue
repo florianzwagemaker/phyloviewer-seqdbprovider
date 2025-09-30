@@ -1,10 +1,23 @@
 <template>
   <div class="app-container">
     <h1>PhyloVuewer</h1>
-    <p>WASM-based phylogenetic tree calculation with fasttree and rendering with Vue + PhylocanvasGL</p>
+    <p>Phylogenetic tree visualization with external tree provider</p>
+    
     <div class="controls-section">
-      <FastaLoader @update:fasta-content="handleFastaContent" />
+      <!-- Keep FASTA loader for backward compatibility but make it optional -->
+      <FastaLoader 
+        v-if="useFastaMode"
+        @update:fasta-content="handleFastaContent" 
+      />
       <MetadataLoader @update:metadata="handleMetadata" />
+    </div>
+    
+    <div v-if="isLoadingTree" class="loading-message">
+      Fetching phylogenetic tree from external provider...
+    </div>
+    
+    <div v-if="treeError" class="error-message">
+      {{ treeError }}
     </div>
     
     <div class="main-content">
@@ -25,8 +38,9 @@
       </div>
       
       <div class="tree-container">
+        <!-- Use biowasm PhyloTree only in FASTA mode -->
         <PhyloTree 
-          v-if="fastaContent"
+          v-if="useFastaMode && fastaContent"
           :fasta-content="fastaContent" 
           @tree-calculated="handleTreeCalculated"
         />
@@ -45,12 +59,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import FastaLoader from './components/FastaLoader.vue'
 import MetadataLoader from './components/MetadataLoader.vue'
 import PhyloTree from './components/PhyloTree.vue'
 import PhylocanvasViewer from './components/PhylocanvasViewer.vue'
 import SidePanel from './components/SidePanel.vue'
+import { TreeApiService } from './services/treeApi.ts'
 import './App.css'
 
 // Reactive state
@@ -61,6 +76,63 @@ const colorMap = ref<Record<string, string>>({})
 const selectedField = ref<string | null>(null)
 const searchTerm = ref('')
 const debugInfo = ref('')
+const isLoadingTree = ref(false)
+const treeError = ref<string | null>(null)
+
+// Configuration from URL parameters
+const treeEndpoint = ref<string | null>(null)
+const useFastaMode = ref(false)
+
+// Helper function to get URL query parameters
+const getUrlParam = (param: string): string | null => {
+  const urlParams = new URLSearchParams(window.location.search)
+  return urlParams.get(param)
+}
+
+// Initialize configuration on mount
+onMounted(() => {
+  const endpoint = getUrlParam('tree-endpoint')
+  if (endpoint) {
+    treeEndpoint.value = endpoint
+    debugInfo.value += `\nTree endpoint configured: ${endpoint}`
+  } else {
+    // If no tree-endpoint is provided, use FASTA mode (backward compatibility)
+    useFastaMode.value = true
+    debugInfo.value += '\nNo tree-endpoint provided, using FASTA mode'
+  }
+})
+
+// Fetch tree from external API
+const fetchTreeFromApi = async (metadataRecords: Record<string, string>[]) => {
+  if (!treeEndpoint.value) {
+    debugInfo.value += '\nNo tree endpoint configured, skipping API fetch'
+    return
+  }
+
+  isLoadingTree.value = true
+  treeError.value = null
+
+  try {
+    const treeApiService = new TreeApiService(treeEndpoint.value)
+    
+    // Extract case IDs from metadata
+    const caseIds = treeApiService.extractCaseIds(metadataRecords, 'seqdb_genome_identifier')
+    debugInfo.value += `\nExtracted ${caseIds.length} case IDs from metadata`
+    
+    // Fetch tree from API
+    const newick = await treeApiService.fetchTree(caseIds)
+    debugInfo.value += `\nReceived Newick tree from API (${newick.length} characters)`
+    
+    newickTree.value = newick
+  } catch (error) {
+    const errorMessage = `Failed to fetch tree from API: ${(error as Error).message}`
+    console.error(errorMessage, error)
+    treeError.value = errorMessage
+    debugInfo.value += `\nError: ${errorMessage}`
+  } finally {
+    isLoadingTree.value = false
+  }
+}
 
 // Event handlers
 const handleFastaContent = (content: string) => {
@@ -70,6 +142,11 @@ const handleFastaContent = (content: string) => {
 const handleMetadata = (data: Record<string, string>[]) => {
   metadata.value = data
   debugInfo.value += `\nMetadata loaded: ${data.length} records`
+  
+  // If we have a tree endpoint and metadata, fetch the tree
+  if (treeEndpoint.value && data.length > 0) {
+    fetchTreeFromApi(data)
+  }
 }
 
 const handleTreeCalculated = (newick: string) => {
@@ -108,6 +185,25 @@ watch(newickTree, (newTree) => {
   margin-bottom: 20px;
   display: flex;
   gap: 20px;
+}
+
+.loading-message {
+  padding: 15px;
+  background: #e3f2fd;
+  border: 1px solid #2196f3;
+  border-radius: 4px;
+  color: #1976d2;
+  font-weight: bold;
+  margin-bottom: 15px;
+}
+
+.error-message {
+  padding: 15px;
+  background: #ffebee;
+  border: 1px solid #f44336;
+  border-radius: 4px;
+  color: #c62828;
+  margin-bottom: 15px;
 }
 
 .main-content {
